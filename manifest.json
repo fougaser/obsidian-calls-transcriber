@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-calls-transcriber",
+  "name": "Calls Transcriber",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Transcribe audio files and folders into your vault through a pluggable provider architecture (OpenAI Whisper and friends).",
+  "author": "fougaser",
+  "authorUrl": "https://github.com/fougaser",
+  "isDesktopOnly": true
+}
