@@ -2,7 +2,12 @@ import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, TFolder } fr
 import type CallsTranscriberPlugin from './main';
 import { renderTabs, TabDefinition } from './ui/tabs';
 import { listProviders, requireProvider } from './providers/registry';
-import { DEFAULT_AUDIO_EXTENSIONS, parseExtensionList } from './audio/extensions';
+import {
+    DEFAULT_AUDIO_EXTENSIONS,
+    DEFAULT_VIDEO_EXTENSIONS,
+    parseExtensionList
+} from './audio/extensions';
+import { AVAILABLE_LANGUAGE_CHIPS } from './ui/languageChips';
 import { ensureProviderConfig, ProviderConfig } from './settings';
 
 class VaultFolderSuggestModal extends FuzzySuggestModal<TFolder> {
@@ -328,43 +333,31 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
         panel.createEl('p', {
             cls: 'setting-item-description',
             text:
-                'Comma-separated language codes (e.g. en, ru, de). With one code, it is passed as the language parameter. ' +
-                'With two or more, a hint prompt is added for the provider. Leave empty to let the provider auto-detect.'
+                'Default languages pre-selected on each file added to the transcriber. With one active, it is sent as the language parameter; with multiple, a prompt hint is added. None active = auto-detect.'
         });
 
-        new Setting(panel)
-            .setName('Language codes')
-            .addText(text =>
-                text
-                    .setPlaceholder('en, ru')
-                    .setValue(this.plugin.settings.languages.join(', '))
-                    .onChange(async value => {
-                        const parsed = value
-                            .split(',')
-                            .map(x => x.trim().toLowerCase())
-                            .filter(x => x.length > 0);
-                        await this.plugin.updateSettings({ languages: parsed });
-                    })
-            );
+        const row = new Setting(panel).setName('Default languages');
+        const chipsWrap = row.controlEl.createDiv({ cls: 'ct-lang-chips' });
 
-        const examples = panel.createEl('details');
-        examples.createEl('summary', { text: 'Supported code examples' });
-        const list = examples.createEl('ul');
-        for (const [code, name] of Object.entries({
-            en: 'English',
-            ru: 'Russian',
-            de: 'German',
-            fr: 'French',
-            es: 'Spanish',
-            it: 'Italian',
-            pt: 'Portuguese',
-            zh: 'Chinese',
-            ja: 'Japanese',
-            ko: 'Korean',
-            ar: 'Arabic',
-            hi: 'Hindi'
-        })) {
-            list.createEl('li', { text: `${code} — ${name}` });
+        for (const { code, label } of AVAILABLE_LANGUAGE_CHIPS) {
+            const chip = chipsWrap.createEl('button', {
+                cls: 'ct-lang-chip',
+                text: label,
+                attr: { type: 'button', title: `Toggle ${label} by default` }
+            });
+            if (this.plugin.settings.languages.includes(code)) chip.addClass('is-active');
+            chip.addEventListener('click', async () => {
+                const current = this.plugin.settings.languages.slice();
+                const idx = current.indexOf(code);
+                if (idx >= 0) {
+                    current.splice(idx, 1);
+                    chip.removeClass('is-active');
+                } else {
+                    current.push(code);
+                    chip.addClass('is-active');
+                }
+                await this.plugin.updateSettings({ languages: current });
+            });
         }
     }
 
@@ -477,6 +470,23 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
                         const parsed = parseExtensionList(value);
                         if (parsed.length > 0) {
                             await this.plugin.updateSettings({ audioExtensions: parsed });
+                        }
+                    })
+            );
+
+        new Setting(panel)
+            .setName('Video file extensions')
+            .setDesc(
+                `Videos selected via file/folder picker have their audio track extracted to a temporary mp3 before transcription (requires ffmpeg). Default: ${DEFAULT_VIDEO_EXTENSIONS.join(', ')}`
+            )
+            .addText(text =>
+                text
+                    .setPlaceholder(DEFAULT_VIDEO_EXTENSIONS.join(', '))
+                    .setValue(this.plugin.settings.videoExtensions.join(', '))
+                    .onChange(async value => {
+                        const parsed = parseExtensionList(value);
+                        if (parsed.length > 0) {
+                            await this.plugin.updateSettings({ videoExtensions: parsed });
                         }
                     })
             );

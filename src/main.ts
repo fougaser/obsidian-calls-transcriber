@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Plugin, WorkspaceLeaf } from 'obsidian';
 import {
     DEFAULT_SETTINGS,
     TranscriberSettings,
@@ -6,7 +6,7 @@ import {
     mergeSettings
 } from './settings';
 import { CallsTranscriberSettingTab } from './settingsTab';
-import { TranscribeModal } from './transcribeModal';
+import { TRANSCRIBE_VIEW_TYPE, TranscribeView } from './transcribeView';
 import { detectFfmpeg, FfmpegStatus } from './audio/ffmpeg';
 import { requireProvider } from './providers/registry';
 
@@ -25,27 +25,41 @@ export default class CallsTranscriberPlugin extends Plugin {
         const stored = (await this.loadData()) as Partial<TranscriberSettings> | null;
         this.settings = mergeSettings(stored);
 
+        this.registerView(TRANSCRIBE_VIEW_TYPE, leaf => new TranscribeView(leaf, this));
+
         this.addSettingTab(new CallsTranscriberSettingTab(this.app, this));
 
         this.addRibbonIcon('microphone', 'Open Calls Transcriber', () => {
-            this.openTranscribeModal();
+            void this.activateTranscribeView();
         });
 
         this.addCommand({
             id: 'calls-transcriber-open',
             name: 'Open transcriber',
-            callback: () => this.openTranscribeModal()
+            callback: () => void this.activateTranscribeView()
         });
 
         void this.redetectFfmpeg();
     }
 
     async onunload(): Promise<void> {
-        // nothing to tear down
+        // Leaves stay registered; Obsidian detaches them.
     }
 
-    openTranscribeModal(): void {
-        new TranscribeModal(this.app, this).open();
+    async activateTranscribeView(): Promise<void> {
+        const existing = this.app.workspace.getLeavesOfType(TRANSCRIBE_VIEW_TYPE);
+        let leaf: WorkspaceLeaf | null;
+        if (existing.length > 0) {
+            leaf = existing[0];
+        } else {
+            leaf = this.app.workspace.getRightLeaf(false);
+            if (leaf) {
+                await leaf.setViewState({ type: TRANSCRIBE_VIEW_TYPE, active: true });
+            }
+        }
+        if (leaf) {
+            this.app.workspace.revealLeaf(leaf);
+        }
     }
 
     async updateSettings(patch: Partial<TranscriberSettings>): Promise<void> {

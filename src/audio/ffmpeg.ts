@@ -105,6 +105,66 @@ export async function detectFfmpeg(customFfmpeg = '', customFfprobe = ''): Promi
     }
 }
 
+export interface StreamInfo {
+    hasVideo: boolean;
+    hasAudio: boolean;
+}
+
+export async function probeStreams(
+    filePath: string,
+    ffprobePath: string,
+    signal?: AbortSignal
+): Promise<StreamInfo> {
+    const res = await runProcess(
+        ffprobePath || 'ffprobe',
+        ['-v', 'quiet', '-print_format', 'json', '-show_streams', filePath],
+        signal
+    );
+    if (res.code !== 0) {
+        throw new Error(`ffprobe stream query failed (${res.code}): ${res.stderr.slice(0, 300)}`);
+    }
+    const parsed = JSON.parse(res.stdout) as { streams?: Array<{ codec_type?: string }> };
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    return {
+        hasVideo: streams.some(s => s.codec_type === 'video'),
+        hasAudio: streams.some(s => s.codec_type === 'audio')
+    };
+}
+
+export async function extractAudioToMp3(
+    sourcePath: string,
+    ffmpegPath: string,
+    outputPath: string,
+    signal?: AbortSignal
+): Promise<void> {
+    const res = await runProcess(
+        ffmpegPath || 'ffmpeg',
+        [
+            '-y',
+            '-i',
+            sourcePath,
+            '-vn',
+            '-c:a',
+            'libmp3lame',
+            '-b:a',
+            '96k',
+            '-ac',
+            '1',
+            outputPath
+        ],
+        signal
+    );
+    if (res.code !== 0) {
+        throw new Error(`ffmpeg audio extraction failed (${res.code}): ${res.stderr.slice(0, 300)}`);
+    }
+}
+
+export function makeTempMp3Path(sourcePath: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'obsidian-transcriber-extract-'));
+    const stem = basename(sourcePath, extname(sourcePath));
+    return join(dir, `${stem}.mp3`);
+}
+
 export async function probeAudio(
     filePath: string,
     ffprobePath: string,

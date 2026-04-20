@@ -1,6 +1,7 @@
-import { statSync, readFileSync } from 'fs';
-import { basename } from 'path';
-import { splitAudio } from '../audio/ffmpeg';
+import { statSync, readFileSync, existsSync, unlinkSync, rmdirSync } from 'fs';
+import { basename, dirname, extname } from 'path';
+import { extractAudioToMp3, makeTempMp3Path, probeStreams, splitAudio } from '../audio/ffmpeg';
+import { normalizeExtension } from '../audio/extensions';
 import { ModelInfo, TranscribeOptions, TranscriptionProvider } from './types';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -133,52 +134,132 @@ export class OpenAIProvider implements TranscriptionProvider {
     ): Promise<string> {
         if (!apiKey) throw new Error('OpenAI API key is empty.');
 
-        const size = statSync(filePath).size;
-        if (size <= opts.maxFileSizeBytes) {
-            opts.onProgress({ stage: 'uploading', pct: 0 });
-            const text = await transcribeSingleFile(filePath, apiKey, opts);
-            opts.onProgress({ stage: 'uploading', pct: 1 });
-            return text;
-        }
-
-        opts.onProgress({ stage: 'probing' });
-        const split = await splitAudio(filePath, opts.ffmpegPath, opts.ffprobePath, {
-            targetBytes: opts.targetChunkBytes,
-            maxChunkSecs: opts.maxChunkSecs,
-            signal: opts.signal,
-            onChunkReady: (_chunk, index, total) => {
-                opts.onProgress({
-                    stage: 'splitting',
-                    chunkIndex: index + 1,
-                    chunkTotal: total,
-                    pct: (index + 1) / total
-                });
-            }
-        });
+        let workingPath = filePath;
+        let extractedCleanup: (() => void) | null = null;
 
         try {
-            const parts: string[] = [];
-            const total = split.chunks.length;
-            for (let i = 0; i < total; i++) {
-                if (opts.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-                opts.onProgress({
-                    stage: 'uploading',
-                    chunkIndex: i + 1,
-                    chunkTotal: total,
-                    pct: i / total
-                });
-                const partText = await transcribeSingleFile(split.chunks[i].path, apiKey, opts);
-                parts.push(partText);
-                opts.onProgress({
-                    stage: 'uploading',
-                    chunkIndex: i + 1,
-                    chunkTotal: total,
-                    pct: (i + 1) / total
-                });
+            const prepared = await this.prepareAudio(filePath, opts);
+            workingPath = prepared.path;
+            extractedCleanup = prepared.cleanup;
+
+            const size = statSync(workingPath).size;
+            if (size <= opts.maxFileSizeBytes) {
+                opts.onProgress({ stage: 'uploading', pct: 0 });
+                const text = await transcribeSingleFile(workingPath, apiKey, opts);
+                opts.onProgress({ stage: 'uploading', pct: 1 });
+                return text;
             }
-            return parts.join('\n');
+
+            opts.onProgress({ stage: 'probing' });
+            const split = await splitAudio(workingPath, opts.ffmpegPath, opts.ffprobePath, {
+                targetBytes: opts.targetChunkBytes,
+                maxChunkSecs: opts.maxChunkSecs,
+                signal: opts.signal,
+                onChunkReady: (_chunk, index, total) => {
+                    opts.onProgress({
+                        stage: 'splitting',
+                        chunkIndex: index + 1,
+                        chunkTotal: total,
+                        pct: (index + 1) / total
+                    });
+                }
+            });
+
+            try {
+                const parts: string[] = [];
+                const total = split.chunks.length;
+                for (let i = 0; i < total; i++) {
+                    if (opts.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+                    opts.onProgress({
+                        stage: 'uploading',
+                        chunkIndex: i + 1,
+                        chunkTotal: total,
+                        pct: i / total
+                    });
+                    const partText = await transcribeSingleFile(split.chunks[i].path, apiKey, opts);
+                    parts.push(partText);
+                    opts.onProgress({
+                        stage: 'uploading',
+                        chunkIndex: i + 1,
+                        chunkTotal: total,
+                        pct: (i + 1) / total
+                    });
+                }
+                return parts.join('\n');
+            } finally {
+                split.cleanup();
+            }
         } finally {
-            split.cleanup();
+            extractedCleanup?.();
         }
     }
+
+    private async prepareAudio(
+        filePath: string,
+        opts: TranscribeOptions
+    ): Promise<{ path: string; cleanup: (() => void) | null }> {
+        const ext = normalizeExtension(extname(filePath));
+        const videoSet = new Set(opts.videoExtensions.map(normalizeExtension));
+        const looksLikeVideo = videoSet.has(ext);
+
+        // If we have no ffmpeg at all, we can't extract — let upstream handle/error.
+        const hasFfmpeg = opts.ffmpegPath.length > 0 && opts.ffprobePath.length > 0;
+        if (!hasFfmpeg) {
+            if (looksLikeVideo) {
+                throw new Error(
+                    `"${basename(filePath)}" appears to be a video file, but ffmpeg was not detected. Install ffmpeg to transcribe video.`
+                );
+            }
+            return { path: filePath, cleanup: null };
+        }
+
+        // Fast path for unambiguous audio extensions: skip probing.
+        if (!looksLikeVideo && isPlainAudio(ext)) {
+            return { path: filePath, cleanup: null };
+        }
+
+        // Probe streams to decide.
+        opts.onProgress({ stage: 'probing' });
+        const streams = await probeStreams(filePath, opts.ffprobePath, opts.signal);
+        if (!streams.hasVideo) {
+            return { path: filePath, cleanup: null };
+        }
+        if (!streams.hasAudio) {
+            throw new Error(`"${basename(filePath)}" has no audio stream to transcribe.`);
+        }
+
+        opts.onProgress({ stage: 'extracting' });
+        const tempPath = makeTempMp3Path(filePath);
+        await extractAudioToMp3(filePath, opts.ffmpegPath, tempPath, opts.signal);
+        return {
+            path: tempPath,
+            cleanup: () => {
+                try {
+                    if (existsSync(tempPath)) unlinkSync(tempPath);
+                } catch {
+                    // ignore
+                }
+                try {
+                    rmdirSync(dirname(tempPath));
+                } catch {
+                    // ignore — non-empty or already gone
+                }
+            }
+        };
+    }
+}
+
+const PLAIN_AUDIO_EXTENSIONS = new Set([
+    '.mp3',
+    '.m4a',
+    '.wav',
+    '.ogg',
+    '.flac',
+    '.aac',
+    '.wma',
+    '.opus'
+]);
+
+function isPlainAudio(ext: string): boolean {
+    return PLAIN_AUDIO_EXTENSIONS.has(ext);
 }

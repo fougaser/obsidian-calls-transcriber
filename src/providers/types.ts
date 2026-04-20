@@ -6,6 +6,7 @@ export interface ModelInfo {
 export type TranscribeStage =
     | 'queued'
     | 'probing'
+    | 'extracting'
     | 'splitting'
     | 'uploading'
     | 'writing'
@@ -30,6 +31,7 @@ export interface TranscribeOptions {
     maxChunkSecs: number;
     ffmpegPath: string;
     ffprobePath: string;
+    videoExtensions: string[];
 }
 
 export interface TranscriptionProvider {

@@ -65,40 +65,20 @@
     color: var(--text-error, var(--color-red));
 }
 
-/* Modal */
+/* Right-sidebar view */
 
-.ct-title.ct-title {
+.ct-view {
+    padding: 10px 12px;
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding-right: 32px;
-}
-
-.ct-title-actions {
-    display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 4px;
 }
 
-.ct-title-icon-btn {
-    padding: 4px;
-    background: transparent;
-    border: 0;
-    border-radius: 4px;
-    cursor: pointer;
-    color: var(--text-muted);
-}
-
-.ct-title-icon-btn:hover {
-    background: var(--background-modifier-hover);
-    color: var(--text-normal);
-}
-
-.ct-modal .ct-section {
+.ct-view .ct-section {
     margin-top: 14px;
 }
 
-.ct-modal .ct-section h3 {
+.ct-view .ct-section h3 {
     margin: 0 0 6px;
     font-size: var(--font-ui-medium);
     color: var(--text-muted);
@@ -106,14 +86,19 @@
     letter-spacing: 0.05em;
 }
 
-.ct-modal .ct-row-buttons {
+.ct-view .ct-row-buttons {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     margin-bottom: 6px;
+    flex-wrap: wrap;
 }
 
-.ct-modal .ct-source-label {
-    padding: 6px 10px;
+.ct-view .ct-row-buttons button {
+    flex: 1 1 auto;
+}
+
+.ct-view .ct-source-label {
+    padding: 6px 8px;
     border-radius: 4px;
     background: var(--background-secondary);
     color: var(--text-muted);
@@ -122,28 +107,31 @@
     word-break: break-all;
 }
 
-.ct-modal .ct-actions {
+.ct-view .ct-actions {
     display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    margin-top: 16px;
+    gap: 6px;
+    margin-top: 14px;
 }
 
-.ct-modal .ct-summary {
-    margin-top: 10px;
+.ct-view .ct-actions button {
+    flex: 1 1 auto;
+}
+
+.ct-view .ct-summary {
+    margin-top: 8px;
     color: var(--text-muted);
     font-size: var(--font-ui-small);
 }
 
-.ct-modal .ct-files {
-    margin-top: 14px;
-    max-height: 320px;
+.ct-view .ct-files {
+    margin-top: 10px;
+    max-height: 55vh;
     overflow-y: auto;
     border: 1px solid var(--background-modifier-border);
     border-radius: 4px;
 }
 
-.ct-modal .ct-file-row {
+.ct-view .ct-file-row {
     display: grid;
     grid-template-columns: 1fr;
     gap: 4px;
@@ -151,30 +139,196 @@
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.ct-modal .ct-file-row:last-child {
+.ct-view .ct-file-row:last-child {
     border-bottom: 0;
 }
 
-.ct-modal .ct-file-name {
+.ct-view .ct-file-name {
     font-size: var(--font-ui-small);
     word-break: break-all;
 }
 
-.ct-modal .ct-file-meta {
+.ct-view .ct-file-meta {
     font-size: 12px;
     color: var(--text-muted);
     font-family: var(--font-monospace, monospace);
 }
 
-.ct-modal .ct-file-row progress {
+.ct-view .ct-file-row progress {
     width: 100%;
     height: 6px;
+    border: 0;
+    border-radius: 3px;
+    overflow: hidden;
+    background: var(--background-secondary);
+    accent-color: var(--interactive-accent);
 }
 
-.ct-modal .ct-file-row progress.is-error::-webkit-progress-bar {
+.ct-view .ct-file-row progress::-webkit-progress-bar {
+    background: var(--background-secondary);
+    border-radius: 3px;
+}
+
+.ct-view .ct-file-row progress::-webkit-progress-value {
+    background: var(--interactive-accent);
+    border-radius: 3px;
+    transition: width 120ms ease-out;
+}
+
+.ct-view .ct-file-row progress::-moz-progress-bar {
+    background: var(--interactive-accent);
+    border-radius: 3px;
+}
+
+.ct-view .ct-file-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ct-view .ct-file-header .ct-file-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ct-view .ct-file-langs,
+.ct-lang-chips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.ct-lang-chip {
+    padding: 1px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 3px;
+    cursor: pointer;
+    min-width: 0;
+    height: auto;
+    box-shadow: none;
+}
+
+.ct-lang-chip:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.ct-lang-chip.is-active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+.ct-lang-chip:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ct-view .ct-file-row progress.is-error::-webkit-progress-bar {
     background: var(--background-modifier-error, rgba(255, 0, 0, 0.15));
 }
 
-.ct-modal .ct-file-row progress.is-skipped::-webkit-progress-value {
+.ct-view .ct-file-row progress.is-error::-webkit-progress-value {
+    background: var(--text-error, #ef4444);
+}
+
+.ct-view .ct-file-row progress.is-skipped::-webkit-progress-value {
     background: var(--text-muted);
+}
+
+.ct-view .is-hidden {
+    display: none !important;
+}
+
+.ct-view .ct-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px;
+}
+
+.ct-view .ct-title {
+    margin: 0;
+    font-size: var(--font-ui-large, 16px);
+    font-weight: 600;
+    color: var(--text-normal);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ct-view .ct-title-gear {
+    padding: 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.ct-view .ct-title-gear:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.ct-view .ct-merge-section {
+    margin-top: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: transparent;
+}
+
+.ct-view .ct-merge-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+}
+
+.ct-view .ct-merge-label input[type='checkbox'] {
+    margin: 0;
+}
+
+/* Provider dropdown: label above, field below */
+
+.ct-view .setting-item {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 6px 0;
+    border-top: 0;
+    background: transparent;
+}
+
+.ct-view .setting-item-info {
+    margin-right: 0;
+    background: transparent;
+}
+
+.ct-view .setting-item-name {
+    font-size: var(--font-ui-small);
+    color: var(--text-muted);
+}
+
+.ct-view .setting-item-control {
+    justify-content: flex-start;
+    background: transparent;
+}
+
+.ct-view .setting-item-control select {
+    width: fit-content;
+    max-width: 100%;
 }

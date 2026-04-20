@@ -1,5 +1,12 @@
+import { statSync } from 'fs';
+
 export interface PickResult {
     files: string[];
+}
+
+export interface MediaPickResult {
+    paths: string[];
+    folder: string | null;
 }
 
 interface ElectronOpenDialogResult {
@@ -37,25 +44,27 @@ function extensionsWithoutDot(audioExtensions: string[]): string[] {
     return audioExtensions.map(ext => (ext.startsWith('.') ? ext.slice(1) : ext));
 }
 
-export async function pickAudioFiles(audioExtensions: string[]): Promise<PickResult> {
+export async function pickMedia(mediaExtensions: string[]): Promise<MediaPickResult | null> {
     const dialog = loadDialog();
     const result = await dialog.showOpenDialog({
-        title: 'Select audio file(s) to transcribe',
-        properties: ['openFile', 'multiSelections'],
+        title: 'Select audio/video file(s) or a folder',
+        properties: ['openFile', 'openDirectory', 'multiSelections'],
         filters: [
-            { name: 'Audio', extensions: extensionsWithoutDot(audioExtensions) },
+            { name: 'Audio & video', extensions: extensionsWithoutDot(mediaExtensions) },
             { name: 'All files', extensions: ['*'] }
         ]
     });
-    return { files: result.canceled ? [] : result.filePaths };
-}
-
-export async function pickFolder(): Promise<string | null> {
-    const dialog = loadDialog();
-    const result = await dialog.showOpenDialog({
-        title: 'Select folder of audio files',
-        properties: ['openDirectory']
-    });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+
+    if (result.filePaths.length === 1) {
+        const only = result.filePaths[0];
+        try {
+            if (statSync(only).isDirectory()) {
+                return { paths: [], folder: only };
+            }
+        } catch {
+            // fall through and treat as file
+        }
+    }
+    return { paths: result.filePaths, folder: null };
 }

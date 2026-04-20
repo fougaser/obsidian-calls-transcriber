@@ -1,4 +1,4 @@
-import { DEFAULT_AUDIO_EXTENSIONS, normalizeExtension } from './audio/extensions';
+import { DEFAULT_AUDIO_EXTENSIONS, DEFAULT_VIDEO_EXTENSIONS, normalizeExtension } from './audio/extensions';
 
 export interface ProviderConfig {
     apiKey: string;
@@ -21,6 +21,7 @@ export interface TranscriberSettings {
     targetChunkBytes: number;
     maxChunkSecs: number;
     audioExtensions: string[];
+    videoExtensions: string[];
 }
 
 export const OPENAI_PROVIDER_ID = 'openai';
@@ -47,7 +48,8 @@ export const DEFAULT_SETTINGS: TranscriberSettings = {
     maxFileSizeBytes: 25 * 1024 * 1024,
     targetChunkBytes: 23 * 1024 * 1024,
     maxChunkSecs: 20 * 60,
-    audioExtensions: [...DEFAULT_AUDIO_EXTENSIONS]
+    audioExtensions: [...DEFAULT_AUDIO_EXTENSIONS],
+    videoExtensions: [...DEFAULT_VIDEO_EXTENSIONS]
 };
 
 function sanitizeStringArray(value: unknown): string[] | null {
@@ -125,7 +127,8 @@ export function mergeSettings(stored: Partial<TranscriberSettings> | null): Tran
         maxFileSizeBytes: sanitizePositiveInt(stored?.maxFileSizeBytes, DEFAULT_SETTINGS.maxFileSizeBytes),
         targetChunkBytes: sanitizePositiveInt(stored?.targetChunkBytes, DEFAULT_SETTINGS.targetChunkBytes),
         maxChunkSecs: sanitizePositiveInt(stored?.maxChunkSecs, DEFAULT_SETTINGS.maxChunkSecs),
-        audioExtensions: sanitizeExtensions(stored?.audioExtensions) ?? [...DEFAULT_SETTINGS.audioExtensions]
+        audioExtensions: sanitizeExtensions(stored?.audioExtensions) ?? [...DEFAULT_SETTINGS.audioExtensions],
+        videoExtensions: sanitizeExtensions(stored?.videoExtensions) ?? [...DEFAULT_SETTINGS.videoExtensions]
     };
 }
 
