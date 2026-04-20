@@ -2,7 +2,7 @@
 
 # Calls Transcriber
 
-### Drop-in audio transcription for Obsidian — pick a file or folder, watch the progress, get a .txt in your vault.
+### Drop-in audio transcription for Obsidian — pick a file or folder, watch the progress, get a .md in your vault.
 
 [![Obsidian](https://img.shields.io/badge/Obsidian-1.5.0+-7C3AED?logo=obsidian&logoColor=white)](https://obsidian.md)
 [![Platform](https://img.shields.io/badge/platform-desktop-444)](#compatibility)
@@ -60,7 +60,7 @@ Enable the plugin under `Settings → Community plugins`, then open the settings
 2. Choose a file or a folder via the picker buttons.
 3. Pick a provider and model (defaults match your settings).
 4. Press **Start**. Watch progress per file. Cancel whenever.
-5. The `.txt` transcripts land in the transcripts folder you configured in settings, named after the source audio file.
+5. The `.md` transcripts land in the transcripts folder you configured in settings, named after the source audio file.
 
 ## Adding a new provider
 

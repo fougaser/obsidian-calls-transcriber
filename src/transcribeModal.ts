@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting, setIcon } from 'obsidian';
 import { basename } from 'path';
 import type CallsTranscriberPlugin from './main';
 import { listProviders, requireProvider } from './providers/registry';
@@ -55,6 +55,8 @@ export class TranscribeModal extends Modal {
 
     onOpen(): void {
         this.titleEl.setText('Transcribe audio');
+        this.titleEl.addClass('ct-title');
+        this.renderTitleActions();
         this.contentEl.addClass('ct-modal');
 
         this.renderPicker();
@@ -72,6 +74,31 @@ export class TranscribeModal extends Modal {
         }
         this.contentEl.empty();
         this.rowsByPath.clear();
+    }
+
+    private renderTitleActions(): void {
+        const actions = this.titleEl.createDiv({ cls: 'ct-title-actions' });
+        const gearBtn = actions.createEl('button', {
+            cls: 'clickable-icon ct-title-icon-btn',
+            attr: { 'aria-label': 'Open Calls Transcriber settings', type: 'button' }
+        });
+        setIcon(gearBtn, 'settings');
+        gearBtn.addEventListener('click', () => this.openPluginSettings());
+    }
+
+    private openPluginSettings(): void {
+        const setting = (this.app as unknown as {
+            setting?: {
+                open?: () => void;
+                openTabById?: (id: string) => void;
+            };
+        }).setting;
+        if (!setting?.open || !setting?.openTabById) {
+            new Notice('Could not open settings automatically — open Settings → Community plugins → Calls Transcriber.', 6000);
+            return;
+        }
+        setting.open();
+        setting.openTabById(this.plugin.manifest.id);
     }
 
     private renderPicker(): void {

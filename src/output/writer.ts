@@ -4,7 +4,7 @@ import { basename, extname } from 'path';
 export function transcriptFileNameFor(sourcePath: string): string {
     const name = basename(sourcePath);
     const ext = extname(name);
-    return `${name.slice(0, name.length - ext.length)}.txt`;
+    return `${name.slice(0, name.length - ext.length)}.md`;
 }
 
 export function vaultTranscriptPath(folder: string, sourcePath: string): string {

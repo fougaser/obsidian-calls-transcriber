@@ -26,6 +26,12 @@ const LANG_NAMES: Record<string, string> = {
 
 const TRANSCRIPTION_MODEL_PATTERN = /whisper|transcribe/i;
 
+export const KNOWN_OPENAI_TRANSCRIPTION_MODELS: readonly string[] = [
+    'whisper-1',
+    'gpt-4o-transcribe',
+    'gpt-4o-mini-transcribe'
+];
+
 function prettyLanguageList(codes: string[]): string {
     return codes.map(code => LANG_NAMES[code.toLowerCase()] ?? code.toUpperCase()).join(' and ');
 }
@@ -90,6 +96,10 @@ async function transcribeSingleFile(
 export class OpenAIProvider implements TranscriptionProvider {
     readonly id = 'openai';
     readonly displayName = 'OpenAI';
+
+    knownModels(): ModelInfo[] {
+        return KNOWN_OPENAI_TRANSCRIPTION_MODELS.map(id => ({ id }));
+    }
 
     async listModels(apiKey: string, signal?: AbortSignal): Promise<ModelInfo[]> {
         if (!apiKey) throw new Error('OpenAI API key is empty.');

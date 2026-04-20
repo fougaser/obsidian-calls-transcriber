@@ -67,6 +67,33 @@
 
 /* Modal */
 
+.ct-title.ct-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 32px;
+}
+
+.ct-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ct-title-icon-btn {
+    padding: 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.ct-title-icon-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
 .ct-modal .ct-section {
     margin-top: 14px;
 }

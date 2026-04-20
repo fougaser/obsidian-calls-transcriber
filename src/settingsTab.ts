@@ -1,9 +1,43 @@
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { App, FuzzySuggestModal, Notice, PluginSettingTab, Setting, TFolder } from 'obsidian';
 import type CallsTranscriberPlugin from './main';
 import { renderTabs, TabDefinition } from './ui/tabs';
-import { listProviders } from './providers/registry';
+import { listProviders, requireProvider } from './providers/registry';
 import { DEFAULT_AUDIO_EXTENSIONS, parseExtensionList } from './audio/extensions';
 import { ensureProviderConfig, ProviderConfig } from './settings';
+
+class VaultFolderSuggestModal extends FuzzySuggestModal<TFolder> {
+    constructor(app: App, private readonly onPick: (folder: TFolder) => void) {
+        super(app);
+        this.setPlaceholder('Select a vault folder');
+    }
+
+    getItems(): TFolder[] {
+        const folders: TFolder[] = [];
+        for (const file of this.app.vault.getAllLoadedFiles()) {
+            if (file instanceof TFolder) folders.push(file);
+        }
+        folders.sort((a, b) => a.path.localeCompare(b.path));
+        return folders;
+    }
+
+    getItemText(folder: TFolder): string {
+        return folder.path.length === 0 ? '/' : folder.path;
+    }
+
+    onChooseItem(folder: TFolder): void {
+        this.onPick(folder);
+    }
+}
+
+function bytesToMb(bytes: number): string {
+    const mb = bytes / (1024 * 1024);
+    return Number.isInteger(mb) ? String(mb) : mb.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function secsToMinutes(secs: number): string {
+    const mins = secs / 60;
+    return Number.isInteger(mins) ? String(mins) : mins.toFixed(2).replace(/\.?0+$/, '');
+}
 
 export class CallsTranscriberSettingTab extends PluginSettingTab {
     private readonly plugin: CallsTranscriberPlugin;
@@ -37,17 +71,33 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
     }
 
     private renderGeneral(panel: HTMLElement): void {
-        new Setting(panel)
+        const transcriptsFolderRow = new Setting(panel)
             .setName('Transcripts folder')
-            .setDesc('Vault-relative folder where .txt transcripts are saved. Created if missing. Leave empty to write to the vault root.')
-            .addText(text =>
-                text
-                    .setPlaceholder('Transcripts')
-                    .setValue(this.plugin.settings.transcriptsFolder)
-                    .onChange(async value => {
-                        await this.plugin.updateSettings({ transcriptsFolder: value.trim() });
-                    })
-            );
+            .setDesc('Vault-relative folder where transcript .md files are saved. Created if missing. Leave empty to write to the vault root.');
+
+        let transcriptsFolderInput: HTMLInputElement | null = null;
+        transcriptsFolderRow.addText(text => {
+            transcriptsFolderInput = text.inputEl;
+            text
+                .setPlaceholder('Transcripts')
+                .setValue(this.plugin.settings.transcriptsFolder)
+                .onChange(async value => {
+                    await this.plugin.updateSettings({ transcriptsFolder: value.trim() });
+                });
+        });
+
+        transcriptsFolderRow.addExtraButton(btn =>
+            btn
+                .setIcon('folder-open')
+                .setTooltip('Pick a vault folder')
+                .onClick(() => {
+                    new VaultFolderSuggestModal(this.app, async folder => {
+                        const path = folder.path;
+                        if (transcriptsFolderInput) transcriptsFolderInput.value = path;
+                        await this.plugin.updateSettings({ transcriptsFolder: path });
+                    }).open();
+                })
+        );
 
         new Setting(panel)
             .setName('Default provider')
@@ -65,7 +115,7 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
 
         new Setting(panel)
             .setName('Skip if transcript exists')
-            .setDesc('When batch-transcribing a folder, skip source files whose .txt already exists in the transcripts folder.')
+            .setDesc('When batch-transcribing a folder, skip source files whose .md transcript already exists in the transcripts folder.')
             .addToggle(toggle =>
                 toggle.setValue(this.plugin.settings.skipIfExists).onChange(async value => {
                     await this.plugin.updateSettings({ skipIfExists: value });
@@ -97,19 +147,37 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
         providerLabel: string,
         cfg: ProviderConfig
     ): void {
-        new Setting(section)
+        const apiKeyRow = new Setting(section)
             .setName('API key')
-            .setDesc(`Stored in the vault's plugin data. Used only when calling ${providerLabel}.`)
-            .addText(text => {
-                text.inputEl.type = 'password';
-                text
-                    .setPlaceholder('sk-...')
-                    .setValue(cfg.apiKey)
-                    .onChange(async value => {
-                        cfg.apiKey = value.trim();
-                        await this.plugin.saveSettings();
-                    });
-            });
+            .setDesc(`Stored in the vault's plugin data. Used only when calling ${providerLabel}.`);
+
+        let apiKeyInput: HTMLInputElement | null = null;
+        let revealed = false;
+
+        apiKeyRow.addText(text => {
+            apiKeyInput = text.inputEl;
+            text.inputEl.type = 'password';
+            text
+                .setPlaceholder('sk-...')
+                .setValue(cfg.apiKey)
+                .onChange(async value => {
+                    cfg.apiKey = value.trim();
+                    await this.plugin.saveSettings();
+                });
+        });
+
+        apiKeyRow.addExtraButton(btn =>
+            btn
+                .setIcon('eye')
+                .setTooltip('Reveal API key')
+                .onClick(() => {
+                    if (!apiKeyInput) return;
+                    revealed = !revealed;
+                    apiKeyInput.type = revealed ? 'text' : 'password';
+                    btn.setIcon(revealed ? 'eye-off' : 'eye');
+                    btn.setTooltip(revealed ? 'Hide API key' : 'Reveal API key');
+                })
+        );
 
         const modelsContainer = section.createDiv({ cls: 'ct-models' });
         this.renderModels(modelsContainer, providerId, cfg);
@@ -162,17 +230,26 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
         const header = container.createEl('h4', { text: 'Available models' });
         header.style.marginBottom = '6px';
 
+        const provider = requireProvider(providerId);
         const known = new Set<string>();
+        for (const model of provider.knownModels()) known.add(model.id);
         for (const id of cfg.discoveredModels) known.add(id);
         for (const id of cfg.customModels) known.add(id);
         for (const id of cfg.enabledModels) known.add(id);
 
         if (known.size === 0) {
             container.createEl('p', {
-                text: 'No models loaded yet. Set the API key and click "Refresh" to fetch available transcription models.',
+                text: 'No models known yet. Set the API key and click "Refresh" to fetch available transcription models.',
                 cls: 'setting-item-description'
             });
             return;
+        }
+
+        if (cfg.discoveredModels.length === 0) {
+            container.createEl('p', {
+                text: 'Built-in list shown below. Click "Refresh" after entering your API key to discover any newer models OpenAI has published.',
+                cls: 'setting-item-description'
+            });
         }
 
         const sorted = Array.from(known).sort((a, b) => a.localeCompare(b));
@@ -345,46 +422,46 @@ export class CallsTranscriberSettingTab extends PluginSettingTab {
         }
 
         new Setting(panel)
-            .setName('Max file size (bytes)')
-            .setDesc(`Files larger than this trigger chunking. OpenAI currently allows 25 MB. Default: ${25 * 1024 * 1024}.`)
+            .setName('Max file size (MB)')
+            .setDesc('Files larger than this trigger chunking. OpenAI currently allows 25 MB. Default: 25.')
             .addText(text =>
                 text
-                    .setPlaceholder(String(25 * 1024 * 1024))
-                    .setValue(String(this.plugin.settings.maxFileSizeBytes))
+                    .setPlaceholder('25')
+                    .setValue(bytesToMb(this.plugin.settings.maxFileSizeBytes))
                     .onChange(async value => {
-                        const n = Number(value);
-                        if (Number.isFinite(n) && n > 0) {
-                            await this.plugin.updateSettings({ maxFileSizeBytes: Math.floor(n) });
+                        const mb = Number(value);
+                        if (Number.isFinite(mb) && mb > 0) {
+                            await this.plugin.updateSettings({ maxFileSizeBytes: Math.round(mb * 1024 * 1024) });
                         }
                     })
             );
 
         new Setting(panel)
-            .setName('Target chunk size (bytes)')
-            .setDesc(`Aimed-for size of each ffmpeg-produced chunk. Default: ${23 * 1024 * 1024}.`)
+            .setName('Target chunk size (MB)')
+            .setDesc('Aimed-for size of each ffmpeg-produced chunk. Default: 23.')
             .addText(text =>
                 text
-                    .setPlaceholder(String(23 * 1024 * 1024))
-                    .setValue(String(this.plugin.settings.targetChunkBytes))
+                    .setPlaceholder('23')
+                    .setValue(bytesToMb(this.plugin.settings.targetChunkBytes))
                     .onChange(async value => {
-                        const n = Number(value);
-                        if (Number.isFinite(n) && n > 0) {
-                            await this.plugin.updateSettings({ targetChunkBytes: Math.floor(n) });
+                        const mb = Number(value);
+                        if (Number.isFinite(mb) && mb > 0) {
+                            await this.plugin.updateSettings({ targetChunkBytes: Math.round(mb * 1024 * 1024) });
                         }
                     })
             );
 
         new Setting(panel)
-            .setName('Max chunk duration (seconds)')
-            .setDesc('Upper bound on chunk length. Default: 1200 (20 minutes).')
+            .setName('Max chunk duration (minutes)')
+            .setDesc('Upper bound on chunk length. Default: 20.')
             .addText(text =>
                 text
-                    .setPlaceholder('1200')
-                    .setValue(String(this.plugin.settings.maxChunkSecs))
+                    .setPlaceholder('20')
+                    .setValue(secsToMinutes(this.plugin.settings.maxChunkSecs))
                     .onChange(async value => {
-                        const n = Number(value);
-                        if (Number.isFinite(n) && n > 0) {
-                            await this.plugin.updateSettings({ maxChunkSecs: Math.floor(n) });
+                        const mins = Number(value);
+                        if (Number.isFinite(mins) && mins > 0) {
+                            await this.plugin.updateSettings({ maxChunkSecs: Math.round(mins * 60) });
                         }
                     })
             );

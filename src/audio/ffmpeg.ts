@@ -58,15 +58,36 @@ function runProcess(bin: string, args: string[], signal?: AbortSignal): Promise<
     });
 }
 
-async function resolveBin(custom: string, fallback: string): Promise<string> {
-    const candidate = custom.trim().length > 0 ? custom.trim() : fallback;
+const COMMON_UNIX_PREFIXES = [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/usr/bin',
+    '/opt/local/bin'
+];
+
+async function tryRun(candidate: string): Promise<boolean> {
     try {
         const res = await runProcess(candidate, ['-version']);
-        if (res.code === 0) return candidate;
-        throw new Error(`${candidate} exited with code ${res.code}: ${res.stderr.slice(0, 200)}`);
-    } catch (err) {
-        throw new Error(`Could not run "${candidate}": ${(err as Error).message}`);
+        return res.code === 0;
+    } catch {
+        return false;
     }
+}
+
+async function resolveBin(custom: string, fallback: string): Promise<string> {
+    const trimmedCustom = custom.trim();
+    if (trimmedCustom.length > 0) {
+        if (await tryRun(trimmedCustom)) return trimmedCustom;
+        throw new Error(`Could not run "${trimmedCustom}": not found or failed to execute.`);
+    }
+    if (await tryRun(fallback)) return fallback;
+    for (const prefix of COMMON_UNIX_PREFIXES) {
+        const candidate = `${prefix}/${fallback}`;
+        if (await tryRun(candidate)) return candidate;
+    }
+    throw new Error(
+        `Could not find "${fallback}" on PATH or in common locations (${COMMON_UNIX_PREFIXES.join(', ')}). Install it or set the path in Advanced settings.`
+    );
 }
 
 export async function detectFfmpeg(customFfmpeg = '', customFfprobe = ''): Promise<FfmpegStatus> {

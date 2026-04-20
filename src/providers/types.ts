@@ -36,6 +36,7 @@ export interface TranscriptionProvider {
     readonly id: string;
     readonly displayName: string;
 
+    knownModels(): ModelInfo[];
     listModels(apiKey: string, signal?: AbortSignal): Promise<ModelInfo[]>;
     transcribe(filePath: string, apiKey: string, opts: TranscribeOptions): Promise<string>;
 }
