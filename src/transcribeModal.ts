@@ -1,4 +1,4 @@
-import { ItemView, Notice, setIcon, WorkspaceLeaf } from 'obsidian';
+import { App, Modal, Notice, setIcon } from 'obsidian';
 import { basename, extname } from 'path';
 import type CallsTranscriberPlugin from './main';
 import { getProvider } from './providers/registry';
@@ -7,19 +7,19 @@ import { pickMedia } from './fs/picker';
 import { listAudioFilesInFolder } from './fs/walkAudio';
 import { mergeMediaExtensions } from './audio/extensions';
 import { ensureProviderConfig } from './settings';
-import { transcriptExists, writeTranscript } from './output/writer';
+import { fileCreationDate, transcriptExists, writeTranscript } from './output/writer';
 import { showInAppNotice, showOsNotification } from './ui/notify';
 import { AVAILABLE_LANGUAGE_CHIPS } from './ui/languageChips';
 
-export const TRANSCRIBE_VIEW_TYPE = 'calls-transcriber-view';
-
 interface FileRow {
     sourcePath: string;
+    rootEl: HTMLElement;
     statusEl: HTMLElement;
     progressEl: HTMLProgressElement;
     stage: TranscribeStage;
     languages: string[];
     langToggles: Map<string, HTMLButtonElement>;
+    removeBtn: HTMLButtonElement;
 }
 
 const STAGE_LABELS: Record<TranscribeStage, string> = {
@@ -33,10 +33,6 @@ const STAGE_LABELS: Record<TranscribeStage, string> = {
     error: 'Error'
 };
 
-// Cumulative progress the bar reaches at each stage boundary. Each stage fills
-// its slice of the bar as sub-steps complete (via event.pct), then jumps to the
-// next stage's start. Missing stages (e.g. no video → no extraction) simply
-// skip their slice.
 const STAGE_RANGE: Record<TranscribeStage, { start: number; end: number }> = {
     queued:     { start: 0.00, end: 0.02 },
     probing:    { start: 0.02, end: 0.05 },
@@ -54,7 +50,7 @@ function stageToProgress(stage: TranscribeStage, pct: number | undefined): numbe
     return range.start + clamped * (range.end - range.start);
 }
 
-export class TranscribeView extends ItemView {
+export class TranscribeModal extends Modal {
     private readonly plugin: CallsTranscriberPlugin;
 
     private selectedFiles: string[] = [];
@@ -79,29 +75,20 @@ export class TranscribeView extends ItemView {
     private running = false;
     private abortController: AbortController | null = null;
 
-    constructor(leaf: WorkspaceLeaf, plugin: CallsTranscriberPlugin) {
-        super(leaf);
+    constructor(app: App, plugin: CallsTranscriberPlugin) {
+        super(app);
         this.plugin = plugin;
     }
 
-    getViewType(): string {
-        return TRANSCRIBE_VIEW_TYPE;
-    }
+    onOpen(): void {
+        this.titleEl.setText('Calls Transcriber');
+        this.titleEl.addClass('ct-title');
+        this.renderTitleActions();
 
-    getDisplayText(): string {
-        return 'Transcribe';
-    }
-
-    getIcon(): string {
-        return 'microphone';
-    }
-
-    async onOpen(): Promise<void> {
         this.contentEl.empty();
-        this.contentEl.addClass('ct-view');
+        this.contentEl.addClass('ct-modal');
 
         // Create every DOM node we reference before any callback can fire.
-        this.renderTitleRow();
         this.renderPicker();
         this.renderFilesList();
         this.renderMergeSection();
@@ -112,7 +99,7 @@ export class TranscribeView extends ItemView {
         this.updateStartState();
     }
 
-    async onClose(): Promise<void> {
+    onClose(): void {
         if (this.running) {
             this.abortController?.abort();
         }
@@ -135,11 +122,10 @@ export class TranscribeView extends ItemView {
         setting.openTabById(this.plugin.manifest.id);
     }
 
-    private renderTitleRow(): void {
-        const row = this.contentEl.createDiv({ cls: 'ct-title-row' });
-        row.createEl('h2', { cls: 'ct-title', text: 'Calls Transcriber' });
-        const gearBtn = row.createEl('button', {
-            cls: 'clickable-icon ct-title-gear',
+    private renderTitleActions(): void {
+        const actions = this.titleEl.createDiv({ cls: 'ct-title-actions' });
+        const gearBtn = actions.createEl('button', {
+            cls: 'clickable-icon ct-title-icon-btn',
             attr: { 'aria-label': 'Open Calls Transcriber settings', type: 'button' }
         });
         setIcon(gearBtn, 'settings');
@@ -187,8 +173,16 @@ export class TranscribeView extends ItemView {
             void this.onStart();
         });
         this.cancelBtn = this.actionsEl.createEl('button', { text: 'Cancel' });
-        this.cancelBtn.addEventListener('click', () => this.onCancel());
-        this.cancelBtn.setAttr('disabled', 'true');
+        this.cancelBtn.addEventListener('click', () => this.onCancelOrClear());
+    }
+
+    private onCancelOrClear(): void {
+        if (this.running) {
+            this.abortController?.abort();
+            showInAppNotice('Cancelling…');
+            return;
+        }
+        this.clearSelection();
     }
 
     private updateVisibility(): void {
@@ -212,6 +206,7 @@ export class TranscribeView extends ItemView {
         const hasModel = providerCfg.defaultModel.length > 0;
         const enabled = !this.running && hasFiles && hasProvider && hasKey && hasModel;
         this.startBtn.disabled = !enabled;
+        this.startBtn.toggleClass('mod-cta', enabled);
 
         this.summaryEl.empty();
         if (!hasProvider) {
@@ -275,7 +270,6 @@ export class TranscribeView extends ItemView {
         for (const file of files) {
             this.rowsByPath.set(file, this.createFileRow(file));
         }
-        // Reset merge toggle when selection count changes semantics.
         if (files.length < 2) {
             this.mergeEnabled = false;
             this.mergeToggle.checked = false;
@@ -288,6 +282,19 @@ export class TranscribeView extends ItemView {
         const header = row.createDiv({ cls: 'ct-file-header' });
         header.createDiv({ cls: 'ct-file-name', text: basename(sourcePath) });
         const langRow = header.createDiv({ cls: 'ct-file-langs' });
+        const removeBtn = header.createEl('button', {
+            cls: 'ct-file-remove clickable-icon',
+            attr: {
+                type: 'button',
+                title: 'Remove from selection',
+                'aria-label': 'Remove from selection'
+            }
+        });
+        setIcon(removeBtn, 'x');
+        removeBtn.addEventListener('click', () => {
+            if (this.running) return;
+            this.removeFile(sourcePath);
+        });
 
         const meta = row.createDiv({ cls: 'ct-file-meta' });
         const statusEl = meta.createSpan({ cls: 'ct-file-status', text: STAGE_LABELS.queued });
@@ -302,11 +309,13 @@ export class TranscribeView extends ItemView {
 
         const fileRow: FileRow = {
             sourcePath,
+            rootEl: row,
             statusEl,
             progressEl,
             stage: 'queued',
             languages: initialLanguages,
-            langToggles: toggles
+            langToggles: toggles,
+            removeBtn
         };
 
         for (const { code, label } of AVAILABLE_LANGUAGE_CHIPS) {
@@ -331,6 +340,40 @@ export class TranscribeView extends ItemView {
         return fileRow;
     }
 
+    private removeFile(sourcePath: string): void {
+        const row = this.rowsByPath.get(sourcePath);
+        if (!row) return;
+        row.rootEl.remove();
+        this.rowsByPath.delete(sourcePath);
+        this.selectedFiles = this.selectedFiles.filter(path => path !== sourcePath);
+        if (this.selectedFiles.length === 0) {
+            this.selectedSourceLabel = '';
+            this.selectedFolder = null;
+            this.sourceLabelEl.setText('No source selected.');
+        } else {
+            this.sourceLabelEl.setText(
+                `${this.selectedSourceLabel}: ${this.selectedFiles.length} file(s).`
+            );
+        }
+        if (this.selectedFiles.length < 2) {
+            this.mergeEnabled = false;
+            this.mergeToggle.checked = false;
+        }
+        this.updateStartState();
+    }
+
+    private clearSelection(): void {
+        this.selectedFiles = [];
+        this.selectedSourceLabel = '';
+        this.selectedFolder = null;
+        this.rowsByPath.clear();
+        this.filesWrap.empty();
+        this.sourceLabelEl.setText('No source selected.');
+        this.mergeEnabled = false;
+        this.mergeToggle.checked = false;
+        this.updateStartState();
+    }
+
     private async onStart(): Promise<void> {
         if (this.running || this.selectedFiles.length === 0) return;
         const providerId = this.plugin.settings.defaultProviderId;
@@ -350,11 +393,11 @@ export class TranscribeView extends ItemView {
 
         this.running = true;
         this.abortController = new AbortController();
-        this.startBtn.disabled = true;
-        this.cancelBtn.removeAttribute('disabled');
+        this.updateStartState();
         this.pickBtn.disabled = true;
         this.mergeToggle.disabled = true;
         for (const row of this.rowsByPath.values()) {
+            row.removeBtn.disabled = true;
             for (const chip of row.langToggles.values()) chip.disabled = true;
         }
 
@@ -374,10 +417,16 @@ export class TranscribeView extends ItemView {
                 const row = this.rowsByPath.get(sourcePath);
                 if (!row) continue;
                 try {
+                    const createdAt = fileCreationDate(sourcePath);
                     if (
                         !merge &&
                         this.plugin.settings.skipIfExists &&
-                        transcriptExists(this.app, this.plugin.settings.transcriptsFolder, sourcePath)
+                        transcriptExists(
+                            this.app,
+                            this.plugin.settings.transcriptsFolder,
+                            sourcePath,
+                            createdAt
+                        )
                     ) {
                         row.stage = 'done';
                         row.statusEl.setText('Skipped (transcript exists)');
@@ -405,7 +454,8 @@ export class TranscribeView extends ItemView {
                             this.app,
                             this.plugin.settings.transcriptsFolder,
                             sourcePath,
-                            text
+                            text,
+                            createdAt
                         );
                         row.stage = 'done';
                         row.statusEl.setText(`Saved to ${written}`);
@@ -432,10 +482,10 @@ export class TranscribeView extends ItemView {
         } finally {
             this.running = false;
             this.abortController = null;
-            this.cancelBtn.setAttr('disabled', 'true');
             this.pickBtn.disabled = false;
             this.mergeToggle.disabled = false;
             for (const row of this.rowsByPath.values()) {
+                row.removeBtn.disabled = false;
                 for (const chip of row.langToggles.values()) chip.disabled = false;
             }
             this.updateStartState();
@@ -467,11 +517,14 @@ export class TranscribeView extends ItemView {
             .map(p => p.text.trim())
             .filter(text => text.length > 0)
             .join('\n\n');
+        const anchorPath = parts[0]?.sourcePath ?? this.selectedFiles[0];
+        const createdAt = anchorPath ? fileCreationDate(anchorPath) : null;
         return writeTranscript(
             this.app,
             this.plugin.settings.transcriptsFolder,
             this.mergedSourcePath(),
-            body
+            body,
+            createdAt
         );
     }
 
@@ -508,7 +561,6 @@ export class TranscribeView extends ItemView {
                     : '';
             row.statusEl.setText(`${base}${suffix}`);
             const next = stageToProgress(event.stage, event.pct);
-            // Monotonic: the bar never regresses within a single file's run.
             if (next > row.progressEl.value) {
                 row.progressEl.value = next;
             }
@@ -529,11 +581,5 @@ export class TranscribeView extends ItemView {
             ffprobePath: status.ok ? status.ffprobePath : settings.ffprobePath,
             videoExtensions: settings.videoExtensions
         });
-    }
-
-    private onCancel(): void {
-        if (!this.running) return;
-        this.abortController?.abort();
-        showInAppNotice('Cancelling…');
     }
 }

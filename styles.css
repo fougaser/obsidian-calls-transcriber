@@ -1,5 +1,7 @@
 /* Calls Transcriber — plugin styles */
 
+/* -------- Settings tab -------- */
+
 .ct-settings .ct-tabs-nav {
     display: flex;
     gap: 4px;
@@ -65,39 +67,62 @@
     color: var(--text-error, var(--color-red));
 }
 
-/* Right-sidebar view */
+/* -------- Modal -------- */
 
-.ct-view {
-    padding: 10px 12px;
+.ct-title.ct-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 32px; /* clear Obsidian's close button */
+}
+
+.ct-title-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.ct-title-icon-btn {
+    padding: 4px;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+}
+
+.ct-title-icon-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.ct-modal {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.ct-view .ct-section {
+.ct-modal .is-hidden {
+    display: none !important;
+}
+
+.ct-modal .ct-section {
     margin-top: 14px;
 }
 
-.ct-view .ct-section h3 {
-    margin: 0 0 6px;
-    font-size: var(--font-ui-medium);
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.ct-view .ct-row-buttons {
+.ct-modal .ct-row-buttons {
     display: flex;
     gap: 6px;
     margin-bottom: 6px;
     flex-wrap: wrap;
 }
 
-.ct-view .ct-row-buttons button {
+.ct-modal .ct-row-buttons button {
     flex: 1 1 auto;
 }
 
-.ct-view .ct-source-label {
+.ct-modal .ct-source-label {
     padding: 6px 8px;
     border-radius: 4px;
     background: var(--background-secondary);
@@ -107,23 +132,20 @@
     word-break: break-all;
 }
 
-.ct-view .ct-actions {
+.ct-modal .ct-actions {
     display: flex;
     gap: 6px;
     margin-top: 14px;
+    justify-content: flex-end;
 }
 
-.ct-view .ct-actions button {
-    flex: 1 1 auto;
-}
-
-.ct-view .ct-summary {
+.ct-modal .ct-summary {
     margin-top: 8px;
     color: var(--text-muted);
     font-size: var(--font-ui-small);
 }
 
-.ct-view .ct-files {
+.ct-modal .ct-files {
     margin-top: 10px;
     max-height: 55vh;
     overflow-y: auto;
@@ -131,7 +153,7 @@
     border-radius: 4px;
 }
 
-.ct-view .ct-file-row {
+.ct-modal .ct-file-row {
     display: grid;
     grid-template-columns: 1fr;
     gap: 4px;
@@ -139,22 +161,22 @@
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.ct-view .ct-file-row:last-child {
+.ct-modal .ct-file-row:last-child {
     border-bottom: 0;
 }
 
-.ct-view .ct-file-name {
+.ct-modal .ct-file-name {
     font-size: var(--font-ui-small);
     word-break: break-all;
 }
 
-.ct-view .ct-file-meta {
+.ct-modal .ct-file-meta {
     font-size: 12px;
     color: var(--text-muted);
     font-family: var(--font-monospace, monospace);
 }
 
-.ct-view .ct-file-row progress {
+.ct-modal .ct-file-row progress {
     width: 100%;
     height: 6px;
     border: 0;
@@ -164,29 +186,41 @@
     accent-color: var(--interactive-accent);
 }
 
-.ct-view .ct-file-row progress::-webkit-progress-bar {
+.ct-modal .ct-file-row progress::-webkit-progress-bar {
     background: var(--background-secondary);
     border-radius: 3px;
 }
 
-.ct-view .ct-file-row progress::-webkit-progress-value {
+.ct-modal .ct-file-row progress::-webkit-progress-value {
     background: var(--interactive-accent);
     border-radius: 3px;
     transition: width 120ms ease-out;
 }
 
-.ct-view .ct-file-row progress::-moz-progress-bar {
+.ct-modal .ct-file-row progress::-moz-progress-bar {
     background: var(--interactive-accent);
     border-radius: 3px;
 }
 
-.ct-view .ct-file-header {
+.ct-modal .ct-file-row progress.is-error::-webkit-progress-bar {
+    background: var(--background-modifier-error, rgba(255, 0, 0, 0.15));
+}
+
+.ct-modal .ct-file-row progress.is-error::-webkit-progress-value {
+    background: var(--text-error, #ef4444);
+}
+
+.ct-modal .ct-file-row progress.is-skipped::-webkit-progress-value {
+    background: var(--text-muted);
+}
+
+.ct-modal .ct-file-header {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.ct-view .ct-file-header .ct-file-name {
+.ct-modal .ct-file-header .ct-file-name {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -194,13 +228,67 @@
     white-space: nowrap;
 }
 
-.ct-view .ct-file-langs,
+.ct-modal .ct-file-langs,
 .ct-lang-chips {
     display: flex;
     align-items: center;
     gap: 4px;
     flex: 0 0 auto;
 }
+
+.ct-modal .ct-file-remove {
+    flex: 0 0 auto;
+    padding: 2px;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: 0;
+    border-radius: 3px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none;
+}
+
+.ct-modal .ct-file-remove:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.ct-modal .ct-file-remove:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.ct-modal .ct-file-remove svg {
+    width: 14px;
+    height: 14px;
+}
+
+.ct-modal .ct-merge-section {
+    margin-top: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: transparent;
+}
+
+.ct-modal .ct-merge-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-normal);
+    font-size: var(--font-ui-small);
+}
+
+.ct-modal .ct-merge-label input[type='checkbox'] {
+    margin: 0;
+}
+
+/* -------- Language chips (shared by modal + settings) -------- */
 
 .ct-lang-chip {
     padding: 1px 6px;
@@ -231,104 +319,4 @@
 .ct-lang-chip:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-}
-
-.ct-view .ct-file-row progress.is-error::-webkit-progress-bar {
-    background: var(--background-modifier-error, rgba(255, 0, 0, 0.15));
-}
-
-.ct-view .ct-file-row progress.is-error::-webkit-progress-value {
-    background: var(--text-error, #ef4444);
-}
-
-.ct-view .ct-file-row progress.is-skipped::-webkit-progress-value {
-    background: var(--text-muted);
-}
-
-.ct-view .is-hidden {
-    display: none !important;
-}
-
-.ct-view .ct-title-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 6px;
-}
-
-.ct-view .ct-title {
-    margin: 0;
-    font-size: var(--font-ui-large, 16px);
-    font-weight: 600;
-    color: var(--text-normal);
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-.ct-view .ct-title-gear {
-    padding: 4px;
-    background: transparent;
-    border: 0;
-    border-radius: 4px;
-    cursor: pointer;
-    color: var(--text-muted);
-    flex: 0 0 auto;
-}
-
-.ct-view .ct-title-gear:hover {
-    background: var(--background-modifier-hover);
-    color: var(--text-normal);
-}
-
-.ct-view .ct-merge-section {
-    margin-top: 10px;
-    padding: 6px 8px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background: transparent;
-}
-
-.ct-view .ct-merge-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    color: var(--text-normal);
-    font-size: var(--font-ui-small);
-}
-
-.ct-view .ct-merge-label input[type='checkbox'] {
-    margin: 0;
-}
-
-/* Provider dropdown: label above, field below */
-
-.ct-view .setting-item {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    padding: 6px 0;
-    border-top: 0;
-    background: transparent;
-}
-
-.ct-view .setting-item-info {
-    margin-right: 0;
-    background: transparent;
-}
-
-.ct-view .setting-item-name {
-    font-size: var(--font-ui-small);
-    color: var(--text-muted);
-}
-
-.ct-view .setting-item-control {
-    justify-content: flex-start;
-    background: transparent;
-}
-
-.ct-view .setting-item-control select {
-    width: fit-content;
-    max-width: 100%;
 }
